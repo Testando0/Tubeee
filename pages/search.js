@@ -8,109 +8,103 @@ export default function SearchPage() {
   const router = useRouter();
   const { q }  = router.query;
 
-  const [videos,  setVideos]  = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error,   setError]   = useState(null);
-  const [nextpage, setNextpage] = useState(null);
-  const [loadingMore, setLM]  = useState(false);
-  const abortRef = useRef(null);
+  const [videos,   setVideos]   = useState([]);
+  const [loading,  setLoading]  = useState(false);
+  const [error,    setError]    = useState(null);
+  const [cont,     setCont]     = useState(null);
+  const [loadMore, setLoadMore] = useState(false);
+  const abort = useRef(null);
 
-  const search = useCallback(async (query, np, append = false) => {
-    if (!query) return;
-    // Cancel previous request
-    abortRef.current?.abort();
-    abortRef.current = new AbortController();
+  const doSearch = useCallback(async (query, continuation, append) => {
+    abort.current?.abort();
+    abort.current = new AbortController();
 
-    if (!append) setLoading(true);
-    else setLM(true);
+    if (!append) setLoading(true); else setLoadMore(true);
     setError(null);
 
     try {
       let url = `/api/search?q=${encodeURIComponent(query)}`;
-      if (np) url += `&nextpage=${encodeURIComponent(np)}`;
-
-      const res  = await fetch(url, { signal: abortRef.current.signal });
+      if (continuation) url += `&continuation=${encodeURIComponent(continuation)}`;
+      const res  = await fetch(url, { signal: abort.current.signal });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-
-      setNextpage(data.nextpage || null);
-      if (append) setVideos(prev => [...prev, ...(data.videos || [])]);
-      else        setVideos(data.videos || []);
+      setCont(data.nextContinuation || null);
+      setVideos(prev => append ? [...prev, ...(data.videos||[])] : (data.videos||[]));
     } catch (e) {
       if (e.name !== 'AbortError') setError(e.message);
     } finally {
       setLoading(false);
-      setLM(false);
+      setLoadMore(false);
     }
   }, []);
 
   useEffect(() => {
-    if (q) {
-      setVideos([]);
-      setNextpage(null);
-      search(q, null, false);
-    }
-  }, [q, search]);
-
-  const loadMore = () => search(q, nextpage, true);
-
-  const title = q ? `"${q}" — RubiTube` : 'Busca — RubiTube';
+    if (!q) return;
+    setVideos([]); setCont(null);
+    doSearch(q, null, false);
+  }, [q, doSearch]);
 
   return (
     <>
-      <Head><title>{title}</title></Head>
-      <main className="wrap">
+      <Head>
+        <title>{q ? `"${q}" — RubiTube` : 'Busca — RubiTube'}</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+      </Head>
+
+      <main className="page" role="main">
         {/* Header */}
-        <div className="search-hdr">
+        <div className="s-hdr">
           {q ? (
             <>
-              <p className="search-hdr__hint">Resultados para</p>
-              <h1 className="search-hdr__q">"{q}"</h1>
+              <p className="s-hdr__hint">Resultados para</p>
+              <h1 className="s-hdr__query">"{q}"</h1>
               {!loading && videos.length > 0 && (
-                <p className="search-hdr__count">{videos.length} vídeos</p>
+                <p className="s-hdr__count">{videos.length} vídeos encontrados</p>
               )}
             </>
           ) : (
-            <h1 className="search-hdr__q" style={{ color: 'var(--text2)' }}>
-              Digite algo para buscar
+            <h1 className="s-hdr__query" style={{ color: 'var(--text-700)' }}>
+              Busque algo acima
             </h1>
           )}
         </div>
 
         {/* Results */}
         {loading ? (
-          <GridSkeleton count={10} />
+          <GridSkeleton n={10} />
         ) : error ? (
-          <div className="error-state">
+          <div className="state" role="alert">
             <h2>Erro na busca</h2>
-            <p style={{ fontSize: 12, maxWidth: 480, margin: '8px auto' }}>{error}</p>
-            <button className="retry-btn" onClick={() => search(q, null, false)}>
+            <p>{error}</p>
+            <button className="btn-retry" onClick={() => doSearch(q, null, false)}>
               ↺ Tentar novamente
             </button>
           </div>
         ) : videos.length === 0 && q ? (
-          <div className="empty-state">
-            <h2>Nenhum resultado</h2>
-            <p>Tente outros termos de busca</p>
+          <div className="state">
+            <h2>Sem resultados</h2>
+            <p>Tente termos diferentes</p>
           </div>
         ) : (
           <>
-            <div className="grid">
-              {videos.map((v, i) => <VideoCard key={`${v.videoId}-${i}`} video={v} index={i % 20} />)}
+            <div className="grid" role="list">
+              {videos.map((v, i) => (
+                <div role="listitem" key={`${v.videoId}-${i}`}>
+                  <VideoCard video={v} index={i % 20} />
+                </div>
+              ))}
             </div>
 
-            {nextpage && (
-              <div className="load-more-wrap">
-                <button className="load-more" onClick={loadMore} disabled={loadingMore}>
-                  {loadingMore ? (
+            {cont && (
+              <div className="load-more">
+                <button
+                  className="btn-more"
+                  onClick={() => doSearch(q, cont, true)}
+                  disabled={loadMore}
+                >
+                  {loadMore ? (
                     <>
-                      <div style={{
-                        width: 15, height: 15,
-                        border: '2px solid rgba(255,255,255,.3)',
-                        borderTopColor: '#fff',
-                        borderRadius: '50%',
-                        animation: 'spin .7s linear infinite',
-                      }}/>
+                      <span className="spinner" style={{ width:16,height:16,border:'2.5px solid rgba(255,255,255,.3)',borderTopColor:'#fff' }}/>
                       Carregando...
                     </>
                   ) : 'Carregar mais'}
