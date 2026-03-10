@@ -1,27 +1,26 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Head from 'next/head';
 import VideoCard from '../components/VideoCard';
 import GridSkeleton from '../components/GridSkeleton';
 
-const CATS = [
-  { label: '🔥 Brasil',   region: 'BR' },
-  { label: '🌍 Global',   region: 'US' },
-  { label: '🇯🇵 Japão',   region: 'JP' },
-  { label: '🇰🇷 Coreia',  region: 'KR' },
-  { label: '🇬🇧 UK',      region: 'GB' },
+const TABS = [
+  { label: '🔥 Agora',    tab: 0 },
+  { label: '🎵 Música',   tab: 1 },
+  { label: '🎮 Games',    tab: 2 },
+  { label: '🎬 Filmes',   tab: 3 },
 ];
 
 export default function Home() {
-  const [videos, setVideos]   = useState([]);
+  const [videos,  setVideos]  = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState(null);
-  const [cat, setCat]         = useState(0);
+  const [error,   setError]   = useState(null);
+  const [active,  setActive]  = useState(0);
 
-  const load = async (idx) => {
+  const load = useCallback(async (tabIdx) => {
     setLoading(true);
     setError(null);
     try {
-      const res  = await fetch(`/api/trending?region=${CATS[idx].region}`);
+      const res  = await fetch(`/api/trending?tab=${TABS[tabIdx].tab}`);
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       setVideos(data.videos || []);
@@ -30,55 +29,71 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  useEffect(() => { load(cat); }, [cat]);
+  useEffect(() => { load(active); }, [active, load]);
 
   return (
     <>
-      <Head><title>RubiTube — YouTube Sem Anúncios</title></Head>
-      <main className="wrap">
-        {/* Hero */}
-        <div className="hero">
-          <h1 className="hero__title">
-            YouTube<br/>
-            <span className="grad-text">sem anúncios.</span>
-          </h1>
-          <p className="hero__sub">Zero rastreamento. Zero interrupções. Só o conteúdo.</p>
-        </div>
+      <Head>
+        <title>RubiTube — Vídeos sem anúncios</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+      </Head>
 
-        {/* Category chips */}
-        <div className="chips">
-          {CATS.map((c, i) => (
+      <main className="page" role="main">
+        {/* Hero */}
+        <section className="hero" aria-label="Bem-vindo">
+          <div className="hero__eyebrow">
+            <span className="hero__pill">
+              <span style={{ width:6, height:6, borderRadius:'50%', background:'#4ade80', display:'inline-block' }}/>
+              Sem anúncios
+            </span>
+          </div>
+          <h1 className="hero__title">
+            Seu streaming.
+            <span className="hero__ruby">Sem interrupções.</span>
+          </h1>
+          <p className="hero__sub">Zero rastreamento · Zero propagandas · 100% conteúdo</p>
+        </section>
+
+        {/* Category tabs */}
+        <div className="chips" role="tablist" aria-label="Categorias em alta">
+          {TABS.map((t, i) => (
             <button
-              key={c.region}
-              className={`chip${cat === i ? ' on' : ''}`}
-              onClick={() => setCat(i)}
+              key={t.tab}
+              className={`chip${active === i ? ' on' : ''}`}
+              onClick={() => setActive(i)}
+              role="tab"
+              aria-selected={active === i}
             >
-              {c.label}
+              {t.label}
             </button>
           ))}
         </div>
 
         {/* Content */}
         {loading ? (
-          <GridSkeleton count={12} />
+          <GridSkeleton n={15} />
         ) : error ? (
-          <div className="error-state">
+          <div className="state" role="alert">
             <h2>Falha ao carregar</h2>
-            <p style={{ fontSize: 12, color: 'var(--text3)', maxWidth: 480, margin: '8px auto' }}>{error}</p>
-            <button className="retry-btn" onClick={() => load(cat)}>
+            <p>{error}</p>
+            <button className="btn-retry" onClick={() => load(active)}>
               ↺ Tentar novamente
             </button>
           </div>
         ) : videos.length === 0 ? (
-          <div className="empty-state">
-            <h2>Nenhum vídeo</h2>
-            <p>Tente outra região</p>
+          <div className="state">
+            <h2>Sem vídeos</h2>
+            <p>Tente outra categoria</p>
           </div>
         ) : (
-          <div className="grid">
-            {videos.map((v, i) => <VideoCard key={v.videoId} video={v} index={i} />)}
+          <div className="grid" role="list">
+            {videos.map((v, i) => (
+              <div role="listitem" key={v.videoId}>
+                <VideoCard video={v} index={i} />
+              </div>
+            ))}
           </div>
         )}
       </main>
