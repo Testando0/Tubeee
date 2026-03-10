@@ -1,14 +1,13 @@
 /** @type {import('next').NextConfig} */
-const nextConfig = {
-  images: {
-    remotePatterns: [
-      { protocol: 'https', hostname: '**.ytimg.com' },
-      { protocol: 'https', hostname: '**.ggpht.com' },
-      { protocol: 'https', hostname: 'i.ytimg.com' },
-      { protocol: 'https', hostname: '**.googleusercontent.com' },
-    ],
-    unoptimized: true,
+module.exports = {
+  images: { unoptimized: true },
+  async headers() {
+    return [{
+      source: '/(.*)',
+      headers: [
+        { key: 'X-Content-Type-Options', value: 'nosniff' },
+        { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+      ],
+    }];
   },
 };
-
-module.exports = nextConfig;
