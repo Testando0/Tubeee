@@ -1,79 +1,77 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import VideoCard from '../components/VideoCard';
+import GridSkeleton from '../components/GridSkeleton';
 
 export default function SearchPage() {
   const router = useRouter();
-  const { q } = router.query;
+  const { q }  = router.query;
 
-  const [videos, setVideos] = useState([]);
+  const [videos,  setVideos]  = useState([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
+  const [error,   setError]   = useState(null);
+  const [nextpage, setNextpage] = useState(null);
+  const [loadingMore, setLM]  = useState(false);
+  const abortRef = useRef(null);
 
-  const search = useCallback(async (query, pageNum, append = false) => {
+  const search = useCallback(async (query, np, append = false) => {
     if (!query) return;
+    // Cancel previous request
+    abortRef.current?.abort();
+    abortRef.current = new AbortController();
+
     if (!append) setLoading(true);
-    else setLoadingMore(true);
+    else setLM(true);
     setError(null);
 
     try {
-      const res = await fetch(`/api/search?q=${encodeURIComponent(query)}&page=${pageNum}`);
+      let url = `/api/search?q=${encodeURIComponent(query)}`;
+      if (np) url += `&nextpage=${encodeURIComponent(np)}`;
+
+      const res  = await fetch(url, { signal: abortRef.current.signal });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-      const newVideos = data.videos || [];
-      if (append) {
-        setVideos(prev => [...prev, ...newVideos]);
-      } else {
-        setVideos(newVideos);
-      }
-      setHasMore(newVideos.length >= 10);
+
+      setNextpage(data.nextpage || null);
+      if (append) setVideos(prev => [...prev, ...(data.videos || [])]);
+      else        setVideos(data.videos || []);
     } catch (e) {
-      setError(e.message);
+      if (e.name !== 'AbortError') setError(e.message);
     } finally {
       setLoading(false);
-      setLoadingMore(false);
+      setLM(false);
     }
   }, []);
 
   useEffect(() => {
     if (q) {
-      setPage(1);
-      setHasMore(true);
-      search(q, 1, false);
+      setVideos([]);
+      setNextpage(null);
+      search(q, null, false);
     }
   }, [q, search]);
 
-  const loadMore = () => {
-    const nextPage = page + 1;
-    setPage(nextPage);
-    search(q, nextPage, true);
-  };
+  const loadMore = () => search(q, nextpage, true);
+
+  const title = q ? `"${q}" — RubiTube` : 'Busca — RubiTube';
 
   return (
     <>
-      <Head>
-        <title>{q ? `"${q}" — freeTube` : 'Busca — freeTube'}</title>
-      </Head>
-
-      <div className="page-container" style={{ paddingTop: 24, paddingBottom: 48 }}>
+      <Head><title>{title}</title></Head>
+      <main className="wrap">
         {/* Header */}
-        <div style={{ marginBottom: 20, paddingBottom: 16, borderBottom: '1px solid var(--border)' }}>
+        <div className="search-hdr">
           {q ? (
             <>
-              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Resultados para</p>
-              <h1 style={{ fontSize: 22, fontWeight: 700 }}>"{q}"</h1>
+              <p className="search-hdr__hint">Resultados para</p>
+              <h1 className="search-hdr__q">"{q}"</h1>
               {!loading && videos.length > 0 && (
-                <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
-                  {videos.length} vídeos encontrados
-                </p>
+                <p className="search-hdr__count">{videos.length} vídeos</p>
               )}
             </>
           ) : (
-            <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-muted)' }}>
+            <h1 className="search-hdr__q" style={{ color: 'var(--text2)' }}>
               Digite algo para buscar
             </h1>
           )}
@@ -81,55 +79,38 @@ export default function SearchPage() {
 
         {/* Results */}
         {loading ? (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 20 }}>
-            {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)' }}>
-                <div className="skeleton" style={{ aspectRatio: '16/9' }} />
-                <div style={{ padding: '12px 14px', background: 'var(--bg-card)', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <div className="skeleton" style={{ height: 14, width: '90%' }} />
-                  <div className="skeleton" style={{ height: 12, width: '60%' }} />
-                  <div className="skeleton" style={{ height: 11, width: '40%' }} />
-                </div>
-              </div>
-            ))}
-          </div>
+          <GridSkeleton count={10} />
         ) : error ? (
           <div className="error-state">
             <h2>Erro na busca</h2>
-            <p>{error}</p>
+            <p style={{ fontSize: 12, maxWidth: 480, margin: '8px auto' }}>{error}</p>
+            <button className="retry-btn" onClick={() => search(q, null, false)}>
+              ↺ Tentar novamente
+            </button>
           </div>
-        ) : videos.length === 0 ? (
+        ) : videos.length === 0 && q ? (
           <div className="empty-state">
             <h2>Nenhum resultado</h2>
-            <p>Tente termos diferentes</p>
+            <p>Tente outros termos de busca</p>
           </div>
         ) : (
           <>
-            <div className="video-grid">
-              {videos.map((video, i) => (
-                <VideoCard key={`${video.videoId}-${i}`} video={video} index={i % 20} />
-              ))}
+            <div className="grid">
+              {videos.map((v, i) => <VideoCard key={`${v.videoId}-${i}`} video={v} index={i % 20} />)}
             </div>
 
-            {hasMore && (
-              <div style={{ display: 'flex', justifyContent: 'center', marginTop: 36 }}>
-                <button
-                  onClick={loadMore}
-                  disabled={loadingMore}
-                  style={{
-                    background: loadingMore ? 'var(--bg-hover)' : 'var(--accent)',
-                    color: '#fff',
-                    padding: '11px 32px',
-                    borderRadius: 8,
-                    fontFamily: 'Outfit', fontSize: 14, fontWeight: 600,
-                    transition: 'all 0.2s',
-                    opacity: loadingMore ? 0.7 : 1,
-                    display: 'flex', alignItems: 'center', gap: 8,
-                  }}
-                >
+            {nextpage && (
+              <div className="load-more-wrap">
+                <button className="load-more" onClick={loadMore} disabled={loadingMore}>
                   {loadingMore ? (
                     <>
-                      <div style={{ width: 16, height: 16, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+                      <div style={{
+                        width: 15, height: 15,
+                        border: '2px solid rgba(255,255,255,.3)',
+                        borderTopColor: '#fff',
+                        borderRadius: '50%',
+                        animation: 'spin .7s linear infinite',
+                      }}/>
                       Carregando...
                     </>
                   ) : 'Carregar mais'}
@@ -138,7 +119,7 @@ export default function SearchPage() {
             )}
           </>
         )}
-      </div>
+      </main>
     </>
   );
 }
