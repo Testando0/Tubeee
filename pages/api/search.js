@@ -1,20 +1,24 @@
-import { fetchInvidious } from '../../lib/invidious';
+import { fetchPiped, normalizeItem } from '../../lib/piped';
 
 export default async function handler(req, res) {
-  const { q, page = 1, type = 'video' } = req.query;
-  if (!q) return res.status(400).json({ error: 'Missing query' });
+  const { q, nextpage } = req.query;
+  if (!q) return res.status(400).json({ error: 'Parâmetro q obrigatório' });
 
   try {
-    const fields = 'videoId,title,description,lengthSeconds,viewCount,author,authorId,publishedText,videoThumbnails,type';
-    const path = `/api/v1/search?q=${encodeURIComponent(q)}&page=${page}&type=${type}&fields=${fields}`;
-    const { data } = await fetchInvidious(path);
+    let path = `/search?q=${encodeURIComponent(q)}&filter=videos`;
+    if (nextpage) path += `&nextpage=${encodeURIComponent(nextpage)}`;
 
-    // Filter only videos
-    const videos = Array.isArray(data) ? data.filter(item => item.type === 'video' || item.videoId) : [];
+    const { data } = await fetchPiped(path);
+    const items = (data.items || []).map(normalizeItem).filter(Boolean);
 
-    res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate');
-    return res.status(200).json({ videos, query: q, page: Number(page) });
+    res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=600');
+    return res.status(200).json({
+      videos: items,
+      nextpage: data.nextpage || null,
+      query: q,
+    });
   } catch (e) {
+    console.error('[search]', e.message);
     return res.status(500).json({ error: e.message });
   }
 }
