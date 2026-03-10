@@ -5,12 +5,12 @@ export default function NotFound() {
   return (
     <>
       <Head><title>404 — RubiTube</title></Head>
-      <div className="error-state" style={{ paddingTop: 100 }}>
-        <div style={{ fontSize: 56, marginBottom: 16 }}>📺</div>
+      <div className="state" style={{ paddingTop: 100 }}>
+        <div style={{ fontSize:56, marginBottom:16 }} aria-hidden="true">📺</div>
         <h2>Página não encontrada</h2>
         <p>O endereço que você procura não existe.</p>
-        <Link href="/" className="retry-btn" style={{ marginTop: 20, display: 'inline-flex' }}>
-          ← Voltar ao início
+        <Link href="/" className="btn-retry" style={{ display:'inline-flex', marginTop:20 }}>
+          ← Início
         </Link>
       </div>
     </>
