@@ -1,34 +1,34 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Link from 'next/link';
-import { formatDuration, formatViews, getEmbedUrl } from '../../lib/piped';
 
-// Skeleton components
+/* ── Skeleton ────────────────────────────────────────────────────── */
 function WatchSkeleton() {
+  const rel = Array.from({ length: 7 });
   return (
-    <div className="watch">
+    <div className="watch-layout" aria-hidden="true">
       <div>
-        <div className="sk" style={{ aspectRatio: '16/9', borderRadius: 12 }} />
-        <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <div className="sk" style={{ height: 26, width: '75%', borderRadius: 6 }} />
-          <div className="sk" style={{ height: 15, width: '45%', borderRadius: 5 }} />
-          <div style={{ display: 'flex', gap: 12, paddingTop: 14 }}>
-            <div className="sk" style={{ width: 42, height: 42, borderRadius: '50%', flexShrink: 0 }} />
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 7 }}>
-              <div className="sk" style={{ height: 14, width: '40%', borderRadius: 4 }} />
-              <div className="sk" style={{ height: 11, width: '25%', borderRadius: 4 }} />
+        <div className="sk" style={{ aspectRatio:'16/9', borderRadius:14, background:'var(--obs-800)' }}/>
+        <div style={{ marginTop:16, display:'flex', flexDirection:'column', gap:10 }}>
+          <div className="sk" style={{ height:22, width:'72%' }}/>
+          <div className="sk" style={{ height:14, width:'45%' }}/>
+          <div style={{ display:'flex', gap:12, paddingTop:14 }}>
+            <div className="sk" style={{ width:42, height:42, borderRadius:'50%', flexShrink:0 }}/>
+            <div style={{ flex:1, display:'flex', flexDirection:'column', gap:7 }}>
+              <div className="sk" style={{ height:13, width:'38%' }}/>
+              <div className="sk" style={{ height:10, width:'24%' }}/>
             </div>
           </div>
         </div>
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} style={{ display: 'flex', gap: 10, padding: 9, background: 'var(--bg2)', borderRadius: 8, border: '1px solid var(--border)' }}>
-            <div className="sk" style={{ width: 140, minWidth: 140, aspectRatio: '16/9', borderRadius: 6 }} />
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6, justifyContent: 'center' }}>
-              <div className="sk" style={{ height: 12, width: '90%', borderRadius: 4 }} />
-              <div className="sk" style={{ height: 11, width: '60%', borderRadius: 4 }} />
+      <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+        {rel.map((_,i) => (
+          <div key={i} style={{ display:'flex', gap:10, padding:10, background:'var(--obs-900)', borderRadius:9, border:'1px solid var(--border-subtle)' }}>
+            <div className="sk" style={{ width:140, minWidth:140, aspectRatio:'16/9', borderRadius:7 }}/>
+            <div style={{ flex:1, display:'flex', flexDirection:'column', justifyContent:'center', gap:6 }}>
+              <div className="sk" style={{ height:11, width:'88%' }}/>
+              <div className="sk" style={{ height:10, width:'55%' }}/>
             </div>
           </div>
         ))}
@@ -37,6 +37,7 @@ function WatchSkeleton() {
   );
 }
 
+/* ── Main Component ──────────────────────────────────────────────── */
 export default function WatchPage() {
   const router = useRouter();
   const { id } = router.query;
@@ -46,18 +47,12 @@ export default function WatchPage() {
   const [error,    setError]    = useState(null);
   const [expanded, setExpanded] = useState(false);
   const [liked,    setLiked]    = useState(false);
-  const [embedIdx, setEmbedIdx] = useState(0);
-  const [embedErr, setEmbedErr] = useState(false);
+  const iframeRef = useRef(null);
 
-  const load = useCallback(async (videoId) => {
-    setLoading(true);
-    setError(null);
-    setVideo(null);
-    setExpanded(false);
-    setEmbedErr(false);
-    setEmbedIdx(0);
+  const load = useCallback(async (vid) => {
+    setLoading(true); setError(null); setVideo(null); setExpanded(false);
     try {
-      const res  = await fetch(`/api/video/${videoId}`);
+      const res  = await fetch(`/api/video/${vid}`);
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       setVideo(data);
@@ -70,94 +65,64 @@ export default function WatchPage() {
 
   useEffect(() => { if (id) load(id); }, [id, load]);
 
-  const handleEmbedErr = () => {
-    const frontends = ['https://piped.video', 'https://piped.adminforge.de', 'https://piped.yt'];
-    if (embedIdx < frontends.length - 1) {
-      setEmbedIdx(prev => prev + 1);
-    } else {
-      setEmbedErr(true);
-    }
-  };
+  // Keep audio alive on iOS — request wake lock
+  useEffect(() => {
+    if (!('wakeLock' in navigator)) return;
+    let lock;
+    navigator.wakeLock.request('screen').then(l => { lock = l; }).catch(() => {});
+    return () => { lock?.release().catch(() => {}); };
+  }, [id]);
 
   if (!id) return null;
 
-  const embedUrl = id ? getEmbedUrl(id, embedIdx) : '';
+  // youtube-nocookie.com — always available, privacy-enhanced, no external dependency
+  const embedSrc = `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&rel=0&modestbranding=1&playsinline=1&enablejsapi=1`;
 
   return (
     <>
       <Head>
         <title>{video ? `${video.title} — RubiTube` : 'RubiTube'}</title>
-        {video && <meta name="description" content={video.description?.slice(0, 155)} />}
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+        {video && <meta name="description" content={`${video.title} por ${video.author}`} />}
       </Head>
 
-      <main className="wrap">
-        {loading ? (
-          <WatchSkeleton />
-        ) : error ? (
-          <div className="error-state" style={{ paddingTop: 80 }}>
+      <main className="page" role="main">
+        {loading ? <WatchSkeleton /> : error ? (
+          <div className="state" role="alert" style={{ paddingTop: 80 }}>
             <h2>Vídeo indisponível</h2>
-            <p style={{ fontSize: 12, maxWidth: 400, margin: '8px auto' }}>{error}</p>
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 16, flexWrap: 'wrap' }}>
-              <button className="retry-btn" onClick={() => load(id)}>↺ Tentar novamente</button>
-              <a
-                href={`https://www.youtube.com/watch?v=${id}`}
-                target="_blank" rel="noopener noreferrer"
-                className="retry-btn" style={{ background: 'var(--bg4)', color: 'var(--text2)' }}
-              >
-                Abrir no YouTube
-              </a>
-            </div>
+            <p>{error}</p>
+            <button className="btn-retry" onClick={() => load(id)}>↺ Tentar novamente</button>
           </div>
         ) : (
-          <div className="watch">
-            {/* ── LEFT COLUMN ──────────────────────────── */}
+          <div className="watch-layout">
+            {/* ── LEFT — Player + Info ─────────────────────── */}
             <div>
               {/* Player */}
-              <div className="player">
-                {embedErr ? (
-                  <div className="player-fallback">
-                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--ruby-bright)" strokeWidth="1.5">
-                      <circle cx="12" cy="12" r="10"/>
-                      <line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-                    </svg>
-                    <p>Player indisponível nesta instância</p>
-                    <a
-                      href={`https://www.youtube.com/watch?v=${id}`}
-                      target="_blank" rel="noopener noreferrer"
-                      className="open-yt"
-                    >
-                      Abrir no YouTube
-                    </a>
-                  </div>
-                ) : (
-                  <iframe
-                    key={`${id}-${embedIdx}`}
-                    src={embedUrl}
-                    title={video?.title}
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                    allowFullScreen
-                    onError={handleEmbedErr}
-                  />
-                )}
+              <div className="player-shell" role="region" aria-label="Player de vídeo">
+                <iframe
+                  ref={iframeRef}
+                  src={embedSrc}
+                  title={video?.title || 'Vídeo'}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+                  allowFullScreen
+                  loading="eager"
+                />
               </div>
 
               {/* Info */}
               {video && (
-                <div className="vinfo">
-                  <h1 className="vinfo__title">{video.title}</h1>
+                <section aria-label="Informações do vídeo">
+                  <h1 className="vinfo__title" style={{ marginTop: 16 }}>{video.title}</h1>
 
                   {/* Stats bar */}
-                  <div className="vinfo__bar">
-                    <span className="vinfo__views">{formatViews(video.views)} views</span>
-                    {video.publishedText && (
-                      <span className="vinfo__date">{video.publishedText}</span>
-                    )}
-                    {video.likes > 0 && (
-                      <span className="vinfo__date">👍 {formatViews(video.likes)}</span>
-                    )}
+                  <div className="vinfo__row">
+                    {video.views && <span className="vinfo__chip">{video.views}</span>}
+                    {video.publishedText && <span className="vinfo__chip">{video.publishedText}</span>}
                     <button
                       className={`like-btn${liked ? ' liked' : ''}`}
                       onClick={() => setLiked(l => !l)}
+                      aria-pressed={liked}
+                      aria-label={liked ? 'Remover curtida' : 'Curtir vídeo'}
                     >
                       <svg width="15" height="15" viewBox="0 0 24 24"
                         fill={liked ? 'currentColor' : 'none'}
@@ -173,120 +138,103 @@ export default function WatchPage() {
                   <div className="ch-row">
                     {video.authorAvatar ? (
                       <img
-                        className="ch-avatar"
+                        className="ch-avi"
                         src={video.authorAvatar}
                         alt={video.author}
                         onError={e => { e.target.style.display = 'none'; }}
                       />
                     ) : (
-                      <div className="ch-avatar-placeholder">
-                        {video.author?.[0]?.toUpperCase() || 'C'}
+                      <div className="ch-avi-ph" aria-hidden="true">
+                        {video.author?.[0]?.toUpperCase() || '?'}
                       </div>
                     )}
                     <div>
                       <p className="ch-name">{video.author}</p>
-                      <p className="ch-sub">Canal</p>
+                      <p className="ch-label">Canal</p>
                     </div>
                   </div>
 
                   {/* Description */}
                   {video.description && (
-                    <div className="desc-box">
+                    <div className="desc">
                       <p
-                        className="desc-text"
-                        style={{
-                          maxHeight: expanded ? 'none' : '4.8em',
-                          overflow: expanded ? 'visible' : 'hidden',
-                        }}
+                        className="desc__text"
+                        style={{ maxHeight: expanded ? 'none' : '4.2em', overflow: expanded ? 'visible' : 'hidden' }}
                       >
                         {video.description}
                       </p>
-                      {video.description.length > 200 && (
-                        <button className="desc-toggle" onClick={() => setExpanded(e => !e)}>
+                      {video.description.length > 180 && (
+                        <button
+                          className="desc__toggle"
+                          onClick={() => setExpanded(e => !e)}
+                          aria-expanded={expanded}
+                        >
                           {expanded ? '▲ Mostrar menos' : '▼ Mostrar mais'}
                         </button>
                       )}
                     </div>
                   )}
 
-                  {/* Stats grid */}
-                  <div className="stats-grid">
+                  {/* Stats */}
+                  <div className="stats-row">
                     {[
-                      { label: 'Duração',       val: formatDuration(video.duration) || '—' },
-                      { label: 'Visualizações', val: formatViews(video.views) },
-                      { label: 'Likes',         val: video.likes ? formatViews(video.likes) : '—' },
-                      { label: 'Publicado',     val: video.publishedText || '—' },
+                      { label: 'Visualizações', val: video.views || '—' },
+                      { label: 'Publicado',      val: video.publishedText || '—' },
+                      { label: 'Canal',          val: video.author || '—' },
+                      { label: 'Plataforma',     val: 'RubiTube' },
                     ].map(s => (
-                      <div className="stat-box" key={s.label}>
-                        <p className="stat-label">{s.label}</p>
-                        <p className="stat-val">{s.val}</p>
+                      <div className="stat" key={s.label}>
+                        <p className="stat__l">{s.label}</p>
+                        <p className="stat__v"
+                          style={{ fontSize: s.val.length > 14 ? 11 : 14, wordBreak:'break-word' }}>
+                          {s.val}
+                        </p>
                       </div>
                     ))}
                   </div>
-
-                  {/* Tags */}
-                  {video.keywords?.length > 0 && (
-                    <div className="tags">
-                      {video.keywords.slice(0, 12).map(tag => (
-                        <Link
-                          key={tag}
-                          href={`/search?q=${encodeURIComponent(tag)}`}
-                          className="tag"
-                        >
-                          #{tag}
-                        </Link>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                </section>
               )}
             </div>
 
-            {/* ── RIGHT COLUMN — Related ────────────────── */}
-            <div>
-              <p className="sec-label">Recomendados</p>
-              {video?.relatedVideos?.length > 0 ? (
-                <div className="related-list">
-                  {video.relatedVideos.map((rv, i) => (
+            {/* ── RIGHT — Related ──────────────────────────── */}
+            <aside aria-label="Vídeos relacionados">
+              <p className="sidebar-label">Recomendados</p>
+              {(video?.related?.length || 0) === 0 ? (
+                <p style={{ color:'var(--text-700)', fontSize:13, textAlign:'center', paddingTop:20 }}>
+                  Nenhuma recomendação disponível
+                </p>
+              ) : (
+                <div className="rel-list">
+                  {video.related.map((r, i) => (
                     <div
-                      key={`${rv.videoId}-${i}`}
+                      key={`${r.videoId}-${i}`}
                       className="rel"
-                      style={{ animationDelay: `${Math.min(i * 0.04, 0.8)}s` }}
-                      onClick={() => router.push(`/watch/${rv.videoId}`)}
-                      role="button"
+                      style={{ animationDelay:`${Math.min(i*.04,.8)}s` }}
+                      onClick={() => router.push(`/watch/${r.videoId}`)}
+                      onKeyDown={e => (e.key==='Enter'||e.key===' ') && router.push(`/watch/${r.videoId}`)}
                       tabIndex={0}
-                      onKeyDown={e => e.key === 'Enter' && router.push(`/watch/${rv.videoId}`)}
+                      role="button"
+                      aria-label={`${r.title} — ${r.author}`}
                     >
                       <div className="rel__thumb">
                         <img
-                          src={rv.thumbnail}
+                          src={`https://i.ytimg.com/vi/${r.videoId}/mqdefault.jpg`}
                           alt=""
                           loading="lazy"
-                          onError={e => {
-                            e.target.onerror = null;
-                            e.target.src = `https://i.ytimg.com/vi/${rv.videoId}/mqdefault.jpg`;
-                          }}
+                          decoding="async"
                         />
-                        {rv.duration > 0 && (
-                          <span className="rel__dur">{formatDuration(rv.duration)}</span>
-                        )}
+                        {r.duration && <span className="rel__dur">{r.duration}</span>}
                       </div>
                       <div className="rel__body">
-                        <p className="rel__title">{rv.title}</p>
-                        <p className="rel__ch">{rv.author}</p>
-                        {rv.views > 0 && (
-                          <p className="rel__views">{formatViews(rv.views)} views</p>
-                        )}
+                        <p className="rel__title">{r.title}</p>
+                        <p className="rel__ch">{r.author}</p>
+                        {r.views && <p className="rel__views">{r.views}</p>}
                       </div>
                     </div>
                   ))}
                 </div>
-              ) : (
-                <p style={{ color: 'var(--text3)', fontSize: 13, textAlign: 'center', paddingTop: 20 }}>
-                  Sem recomendações
-                </p>
               )}
-            </div>
+            </aside>
           </div>
         )}
       </main>
