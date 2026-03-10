@@ -1,42 +1,45 @@
 import { useRouter } from 'next/router';
-import { formatDuration, formatViews } from '../lib/piped';
 
 export default function VideoCard({ video, index = 0 }) {
   const router = useRouter();
   if (!video?.videoId) return null;
 
-  const delay = Math.min(index * 0.04, 0.6);
+  const go = () => router.push(`/watch/${video.videoId}`);
+  const delay = `${Math.min(index * 0.045, 0.65)}s`;
 
   return (
-    <div
+    <article
       className="card"
-      style={{ animationDelay: `${delay}s` }}
-      onClick={() => router.push(`/watch/${video.videoId}`)}
+      style={{ animationDelay: delay }}
+      onClick={go}
+      onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && go()}
       tabIndex={0}
       role="button"
-      aria-label={video.title}
-      onKeyDown={e => e.key === 'Enter' && router.push(`/watch/${video.videoId}`)}
+      aria-label={`${video.title} — ${video.author}`}
     >
       {/* Thumbnail */}
-      <div className="card__thumb">
+      <div className="card__img">
         <img
           src={video.thumbnail}
           alt=""
           loading="lazy"
+          decoding="async"
           onError={e => {
             e.target.onerror = null;
             e.target.src = `https://i.ytimg.com/vi/${video.videoId}/mqdefault.jpg`;
           }}
         />
-        <div className="card__overlay">
+        <div className="card__play-wrap" aria-hidden="true">
           <div className="card__play">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="white">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="white">
               <path d="M8 5v14l11-7z"/>
             </svg>
           </div>
         </div>
-        {video.duration > 0 && (
-          <span className="card__dur">{formatDuration(video.duration)}</span>
+        {video.duration && (
+          <span className="card__dur" aria-label={`Duração: ${video.duration}`}>
+            {video.duration}
+          </span>
         )}
       </div>
 
@@ -44,11 +47,10 @@ export default function VideoCard({ video, index = 0 }) {
       <div className="card__body">
         <p className="card__title">{video.title}</p>
         <p className="card__ch">{video.author}</p>
-        <div className="card__meta">
-          {video.views > 0 && <span>{formatViews(video.views)} views</span>}
-          {video.publishedText && <span>· {video.publishedText}</span>}
-        </div>
+        <p className="card__meta">
+          {[video.views, video.publishedText].filter(Boolean).join(' · ')}
+        </p>
       </div>
-    </div>
+    </article>
   );
 }
